@@ -6,6 +6,8 @@ export type OptionState = '' | 'correct' | 'wrong' | 'reveal';
 
 export interface User { mobile: string; name: string; }
 
+export interface TriviaCategory { id: number; name: string; }
+
 export interface Question {
   cat: { en: string; ar: string };
   q: { en: string; ar: string };

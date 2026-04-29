@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Cairo } from 'next/font/google';
+import { Cairo, Playfair_Display } from 'next/font/google';
 import './globals.css';
 
 const cairo = Cairo({
@@ -9,15 +9,23 @@ const cairo = Cairo({
   display: 'swap',
 });
 
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['700', '900'],
+  style: ['normal', 'italic'],
+  variable: '--font-playfair',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'Trivia Showdown | مسابقة الأسئلة',
-  description: 'The ultimate two-team trivia challenge',
+  title: 'Family Trivia | مسابقة عائلية',
+  description: 'The ultimate family trivia challenge',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" dir="ltr">
-      <body className={cairo.variable}>{children}</body>
+      <body className={`${cairo.variable} ${playfair.variable}`}>{children}</body>
     </html>
   );
 }

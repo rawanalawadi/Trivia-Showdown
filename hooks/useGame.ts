@@ -5,7 +5,8 @@ import { QUESTIONS, STRINGS, LABELS } from '@/lib/data';
 import { lsGet, lsSet } from '@/lib/storage';
 import type {
   Lang, Difficulty, GameMode, Screen,
-  User, Question, CustomQuestion, BuilderCategory, FeedbackState, OptionState, LeaderboardEntry,
+  User, Question, CustomQuestion, BuilderCategory,
+  TriviaCategory, FeedbackState, OptionState, LeaderboardEntry,
 } from '@/lib/types';
 
 const CIRC = 2 * Math.PI * 27;
@@ -68,6 +69,14 @@ export interface GameAPI {
   setDifficulty: (d: Difficulty) => void;
   gameMode: GameMode;
   setGameMode: (m: GameMode) => void;
+
+  // API categories
+  availableCategories: TriviaCategory[];
+  selectedCategories: number[];
+  categoriesLoading: boolean;
+  toggleCategory: (id: number) => void;
+  selectAllCategories: () => void;
+  clearCategories: () => void;
 
   // Builder (category-based)
   builderCategories: BuilderCategory[];
@@ -136,9 +145,13 @@ export function useGame(): GameAPI {
   const [builderCategories, setBuilderCategories] = useState<BuilderCategory[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
+  // API categories
+  const [availableCategories, setAvailableCategories] = useState<TriviaCategory[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const questionCache = useRef<Partial<Record<Difficulty, Question[]>>>({});
 
   const [quitModal, setQuitModal] = useState(false);
   const [clearModal, setClearModal] = useState(false);
@@ -163,7 +176,7 @@ export function useGame(): GameAPI {
   const [timerActive, setTimerActive] = useState(false);
 
   const [confettiActive, setConfettiActive] = useState(false);
-  const [confettiColor, setConfettiColor] = useState('#ffd60a');
+  const [confettiColor, setConfettiColor] = useState('#e8b84b');
 
   const handleTimeoutRef = useRef<() => void>(() => {});
   const advanceRoundRef  = useRef<() => void>(() => {});
@@ -173,6 +186,19 @@ export function useGame(): GameAPI {
     (STRINGS[lang] as Record<string, string>)[key] ?? key,
   [lang]);
 
+  // Fetch available categories on mount
+  useEffect(() => {
+    setCategoriesLoading(true);
+    fetch('https://opentdb.com/api_category.php')
+      .then(r => r.json())
+      .then((d: { trivia_categories: TriviaCategory[] }) => {
+        if (d.trivia_categories) setAvailableCategories(d.trivia_categories);
+      })
+      .catch(() => {})
+      .finally(() => setCategoriesLoading(false));
+  }, []);
+
+  // Restore session from localStorage
   useEffect(() => {
     const savedLang = lsGet<Lang>('tq_lang', 'en');
     setLang(savedLang);
@@ -278,6 +304,21 @@ export function useGame(): GameAPI {
     });
   }, [user]);
 
+  const toggleCategory = useCallback((id: number) => {
+    setSelectedCategories(prev =>
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
+  }, []);
+
+  const selectAllCategories = useCallback(() => {
+    setSelectedCategories(prev => {
+      // If all are already selected, clear; otherwise select all
+      return prev.length === 0 ? prev : [];
+    });
+  }, []);
+
+  const clearCategories = useCallback(() => setSelectedCategories([]), []);
+
   // Timer tick
   useEffect(() => {
     if (!timerActive || timeLeft <= 0) return;
@@ -322,19 +363,25 @@ export function useGame(): GameAPI {
   };
 
   const startGame = useCallback((t1: string, t2: string) => {
-    if (questionCache.current[difficulty]) {
-      initGame(shuffle([...questionCache.current[difficulty]!]), difficulty, t1, t2);
-      return;
-    }
     setIsLoading(true);
     setApiError(null);
-    fetch(`https://opentdb.com/api.php?amount=50&type=multiple&difficulty=${difficulty}`)
-      .then(r => r.json())
-      .then((data: { response_code: number; results: TDBResult[] }) => {
-        if (data.response_code !== 0 || !data.results?.length) throw new Error('bad_response');
-        const mapped = data.results.map(mapTDBQuestion);
-        questionCache.current[difficulty] = mapped;
-        initGame(shuffle([...mapped]), difficulty, t1, t2);
+
+    const catIds = selectedCategories;
+    const totalAmount = 30;
+
+    const urls = catIds.length > 0
+      ? catIds.map(id =>
+          `https://opentdb.com/api.php?amount=${Math.max(5, Math.ceil(totalAmount / catIds.length))}&category=${id}&type=multiple&difficulty=${difficulty}`
+        )
+      : [`https://opentdb.com/api.php?amount=${totalAmount}&type=multiple&difficulty=${difficulty}`];
+
+    Promise.all(urls.map(url => fetch(url).then(r => r.json())))
+      .then((results: Array<{ response_code: number; results: TDBResult[] }>) => {
+        const qs = results.flatMap(d =>
+          d.response_code === 0 && d.results ? d.results.map(mapTDBQuestion) : []
+        );
+        if (qs.length === 0) throw new Error('no_results');
+        initGame(shuffle(qs), difficulty, t1, t2);
       })
       .catch(() => {
         setApiError('err_api');
@@ -342,7 +389,7 @@ export function useGame(): GameAPI {
       })
       .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficulty, lang]);
+  }, [difficulty, selectedCategories, lang]);
 
   const startCustomGame = useCallback((t1: string, t2: string) => {
     const qs: Question[] = shuffle(
@@ -363,9 +410,9 @@ export function useGame(): GameAPI {
   // Always-fresh refs
   showResultsRef.current = () => {
     stopTimer();
-    let color = '#ffd60a';
-    if (scores[0] > scores[1]) color = '#ff2d55';
-    else if (scores[1] > scores[0]) color = '#0a84ff';
+    let color = '#e8b84b';
+    if (scores[0] > scores[1]) color = '#e05555';
+    else if (scores[1] > scores[0]) color = '#3aaa8a';
     setConfettiColor(color);
     setConfettiActive(true);
 
@@ -495,6 +542,8 @@ export function useGame(): GameAPI {
     screen, lang, t, toggleLang,
     user, goWelcome, goLogin, goGuest, doLogin, doLogout,
     difficulty, setDifficulty, gameMode, setGameMode,
+    availableCategories, selectedCategories, categoriesLoading,
+    toggleCategory, selectAllCategories, clearCategories,
     builderCategories, goBuilder, addBuilderCategory, deleteBuilderCategory,
     addQuestionToCategory, deleteQuestionFromCategory,
     leaderboard, goLeaderboard, clearLeaderboard,
