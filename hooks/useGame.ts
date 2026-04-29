@@ -5,10 +5,10 @@ import { QUESTIONS, STRINGS, LABELS } from '@/lib/data';
 import { lsGet, lsSet } from '@/lib/storage';
 import type {
   Lang, Difficulty, GameMode, Screen,
-  User, Question, CustomQuestion, FeedbackState, OptionState, LeaderboardEntry,
+  User, Question, CustomQuestion, BuilderCategory, FeedbackState, OptionState, LeaderboardEntry,
 } from '@/lib/types';
 
-const CIRC = 2 * Math.PI * 27; // SVG r=27
+const CIRC = 2 * Math.PI * 27;
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -24,7 +24,33 @@ function formatDate(ts: number): string {
   return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
 }
 
-// Public shape the components receive
+function decodeHtml(html: string): string {
+  if (typeof window === 'undefined') return html;
+  const el = document.createElement('textarea');
+  el.innerHTML = html;
+  return el.value;
+}
+
+interface TDBResult {
+  category: string;
+  difficulty: string;
+  question: string;
+  correct_answer: string;
+  incorrect_answers: string[];
+}
+
+function mapTDBQuestion(r: TDBResult): Question {
+  const allOpts = shuffle([r.correct_answer, ...r.incorrect_answers]).map(decodeHtml);
+  const decodedCorrect = decodeHtml(r.correct_answer);
+  const ans = allOpts.indexOf(decodedCorrect);
+  return {
+    cat: { en: r.category, ar: r.category },
+    q:   { en: decodeHtml(r.question), ar: decodeHtml(r.question) },
+    opts: { en: allOpts, ar: allOpts },
+    ans,
+  };
+}
+
 export interface GameAPI {
   screen: Screen;
   lang: Lang;
@@ -43,14 +69,21 @@ export interface GameAPI {
   gameMode: GameMode;
   setGameMode: (m: GameMode) => void;
 
-  customQuestions: CustomQuestion[];
+  // Builder (category-based)
+  builderCategories: BuilderCategory[];
   goBuilder: () => void;
-  addCustomQuestion: (q: CustomQuestion) => void;
-  deleteCustomQuestion: (i: number) => void;
+  addBuilderCategory: (name: string, imageUrl: string) => void;
+  deleteBuilderCategory: (id: string) => void;
+  addQuestionToCategory: (categoryId: string, q: CustomQuestion) => void;
+  deleteQuestionFromCategory: (categoryId: string, qIndex: number) => void;
 
   leaderboard: LeaderboardEntry[];
   goLeaderboard: () => void;
   clearLeaderboard: () => void;
+
+  isLoading: boolean;
+  apiError: string | null;
+  clearApiError: () => void;
 
   startGame: (t1: string, t2: string) => void;
   startCustomGame: (t1: string, t2: string) => void;
@@ -78,33 +111,41 @@ export interface GameAPI {
   quitModal: boolean;
   clearModal: boolean;
   addQModal: boolean;
+  addQCategoryId: string | null;
+  addCategoryModal: boolean;
   openQuitModal: () => void;
   closeQuitModal: () => void;
   confirmQuit: () => void;
   openClearModal: () => void;
   closeClearModal: () => void;
-  openAddQModal: () => void;
+  openAddQModal: (categoryId: string) => void;
   closeAddQModal: () => void;
+  openAddCategoryModal: () => void;
+  closeAddCategoryModal: () => void;
 
   circumference: number;
+  formatDate: (ts: number) => string;
 }
 
 export function useGame(): GameAPI {
-  // ── App ──────────────────────────────────────────────
   const [screen, setScreen] = useState<Screen>('welcome');
   const [lang, setLang] = useState<Lang>('en');
   const [user, setUser] = useState<User | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [gameMode, setGameMode] = useState<GameMode>('ready');
-  const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([]);
+  const [builderCategories, setBuilderCategories] = useState<BuilderCategory[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
-  // ── Modals ───────────────────────────────────────────
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const questionCache = useRef<Partial<Record<Difficulty, Question[]>>>({});
+
   const [quitModal, setQuitModal] = useState(false);
   const [clearModal, setClearModal] = useState(false);
   const [addQModal, setAddQModal] = useState(false);
+  const [addQCategoryId, setAddQCategoryId] = useState<string | null>(null);
+  const [addCategoryModal, setAddCategoryModal] = useState(false);
 
-  // ── Game ─────────────────────────────────────────────
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState<[number, number]>([0, 0]);
@@ -117,27 +158,21 @@ export function useGame(): GameAPI {
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [gameDiff, setGameDiff] = useState<string>('medium');
 
-  // ── Timer ────────────────────────────────────────────
   const [timeLeft, setTimeLeft] = useState(15);
   const [timerDuration, setTimerDuration] = useState(15);
   const [timerActive, setTimerActive] = useState(false);
 
-  // ── Confetti ─────────────────────────────────────────
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiColor, setConfettiColor] = useState('#ffd60a');
 
-  // ── Refs ─────────────────────────────────────────────
-  // Updated on every render so effects always get the latest closure
   const handleTimeoutRef = useRef<() => void>(() => {});
   const advanceRoundRef  = useRef<() => void>(() => {});
   const showResultsRef   = useRef<() => void>(() => {});
 
-  // ── i18n ─────────────────────────────────────────────
   const t = useCallback((key: string): string =>
     (STRINGS[lang] as Record<string, string>)[key] ?? key,
   [lang]);
 
-  // ── Initialise from localStorage ─────────────────────
   useEffect(() => {
     const savedLang = lsGet<Lang>('tq_lang', 'en');
     setLang(savedLang);
@@ -147,12 +182,11 @@ export function useGame(): GameAPI {
     const savedUser = lsGet<User | null>('tq_user', null);
     if (savedUser?.mobile && savedUser?.name) {
       setUser(savedUser);
-      setCustomQuestions(lsGet<CustomQuestion[]>(`tq_custom_${savedUser.mobile}`, []));
+      setBuilderCategories(lsGet<BuilderCategory[]>(`tq_categories_${savedUser.mobile}`, []));
     }
     setLeaderboard(lsGet<LeaderboardEntry[]>('tq_leaderboard', []));
   }, []);
 
-  // ── Lang helpers ─────────────────────────────────────
   const toggleLang = useCallback(() => {
     setLang(prev => {
       const next: Lang = prev === 'en' ? 'ar' : 'en';
@@ -163,7 +197,6 @@ export function useGame(): GameAPI {
     });
   }, []);
 
-  // ── Auth ─────────────────────────────────────────────
   const goWelcome = useCallback(() => setScreen('welcome'), []);
   const goLogin   = useCallback(() => setScreen('login'),   []);
   const goGuest   = useCallback(() => setScreen('home'),    []);
@@ -174,7 +207,7 @@ export function useGame(): GameAPI {
     const u: User = { mobile: mobile.replace(/\D/g, ''), name: name.trim() };
     setUser(u);
     lsSet('tq_user', u);
-    setCustomQuestions(lsGet<CustomQuestion[]>(`tq_custom_${u.mobile}`, []));
+    setBuilderCategories(lsGet<BuilderCategory[]>(`tq_categories_${u.mobile}`, []));
     setScreen('home');
     return 'ok';
   }, []);
@@ -182,11 +215,10 @@ export function useGame(): GameAPI {
   const doLogout = useCallback(() => {
     setUser(null);
     lsSet('tq_user', null);
-    setCustomQuestions([]);
+    setBuilderCategories([]);
     setScreen('welcome');
   }, []);
 
-  // ── Leaderboard ──────────────────────────────────────
   const goLeaderboard = useCallback(() => {
     setLeaderboard(lsGet<LeaderboardEntry[]>('tq_leaderboard', []));
     setScreen('leaderboard');
@@ -204,34 +236,56 @@ export function useGame(): GameAPI {
     setLeaderboard(updated);
   };
 
-  // ── Builder ──────────────────────────────────────────
   const goBuilder = useCallback(() => setScreen('builder'), []);
 
-  const addCustomQuestion = useCallback((q: CustomQuestion) => {
-    setCustomQuestions(prev => {
-      const next = [...prev, q];
-      if (user) lsSet(`tq_custom_${user.mobile}`, next);
+  const addBuilderCategory = useCallback((name: string, imageUrl: string) => {
+    setBuilderCategories(prev => {
+      const next: BuilderCategory[] = [...prev, { id: `cat-${Date.now()}`, name: name.trim(), imageUrl, questions: [] }];
+      if (user) lsSet(`tq_categories_${user.mobile}`, next);
       return next;
     });
   }, [user]);
 
-  const deleteCustomQuestion = useCallback((i: number) => {
-    setCustomQuestions(prev => {
-      const next = prev.filter((_, idx) => idx !== i);
-      if (user) lsSet(`tq_custom_${user.mobile}`, next);
+  const deleteBuilderCategory = useCallback((id: string) => {
+    setBuilderCategories(prev => {
+      const next = prev.filter(c => c.id !== id);
+      if (user) lsSet(`tq_categories_${user.mobile}`, next);
       return next;
     });
   }, [user]);
 
-  // ── Timer effects ─────────────────────────────────────
-  // Tick
+  const addQuestionToCategory = useCallback((categoryId: string, q: CustomQuestion) => {
+    setBuilderCategories(prev => {
+      const next = prev.map(c =>
+        c.id === categoryId && c.questions.length < 6
+          ? { ...c, questions: [...c.questions, q] }
+          : c
+      );
+      if (user) lsSet(`tq_categories_${user.mobile}`, next);
+      return next;
+    });
+  }, [user]);
+
+  const deleteQuestionFromCategory = useCallback((categoryId: string, qIndex: number) => {
+    setBuilderCategories(prev => {
+      const next = prev.map(c =>
+        c.id === categoryId
+          ? { ...c, questions: c.questions.filter((_, i) => i !== qIndex) }
+          : c
+      );
+      if (user) lsSet(`tq_categories_${user.mobile}`, next);
+      return next;
+    });
+  }, [user]);
+
+  // Timer tick
   useEffect(() => {
     if (!timerActive || timeLeft <= 0) return;
     const id = window.setTimeout(() => setTimeLeft(t => Math.max(0, t - 1)), 1000);
     return () => clearTimeout(id);
   }, [timerActive, timeLeft]);
 
-  // Timeout trigger (calls always-fresh ref)
+  // Timeout trigger
   useEffect(() => {
     if (!timerActive || timeLeft > 0) return;
     setTimerActive(false);
@@ -246,7 +300,6 @@ export function useGame(): GameAPI {
 
   const stopTimer = useCallback(() => setTimerActive(false), []);
 
-  // ── Game setup ────────────────────────────────────────
   const initGame = (qs: Question[], diff: string, t1: string, t2: string) => {
     const names: [string, string] = [
       t1.trim() || (lang === 'ar' ? 'الفريق الأول' : 'Team 1'),
@@ -269,30 +322,50 @@ export function useGame(): GameAPI {
   };
 
   const startGame = useCallback((t1: string, t2: string) => {
-    initGame(shuffle([...QUESTIONS[difficulty]]), difficulty, t1, t2);
+    if (questionCache.current[difficulty]) {
+      initGame(shuffle([...questionCache.current[difficulty]!]), difficulty, t1, t2);
+      return;
+    }
+    setIsLoading(true);
+    setApiError(null);
+    fetch(`https://opentdb.com/api.php?amount=50&type=multiple&difficulty=${difficulty}`)
+      .then(r => r.json())
+      .then((data: { response_code: number; results: TDBResult[] }) => {
+        if (data.response_code !== 0 || !data.results?.length) throw new Error('bad_response');
+        const mapped = data.results.map(mapTDBQuestion);
+        questionCache.current[difficulty] = mapped;
+        initGame(shuffle([...mapped]), difficulty, t1, t2);
+      })
+      .catch(() => {
+        setApiError('err_api');
+        initGame(shuffle([...QUESTIONS[difficulty]]), difficulty, t1, t2);
+      })
+      .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [difficulty, lang]);
 
   const startCustomGame = useCallback((t1: string, t2: string) => {
     const qs: Question[] = shuffle(
-      customQuestions.map(q => ({
-        cat:  { en: q.category, ar: q.category },
-        q:    { en: q.question,  ar: q.question },
-        opts: { en: q.options,   ar: q.options  },
-        ans:  q.answer,
-      }))
+      builderCategories.flatMap(cat =>
+        cat.questions.map(q => ({
+          cat:  { en: cat.name, ar: cat.name },
+          q:    { en: q.question, ar: q.question },
+          opts: { en: q.options,  ar: q.options  },
+          ans:  q.answer,
+          imageUrl: cat.imageUrl || undefined,
+        }))
+      )
     );
     initGame(qs, 'custom', t1, t2);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customQuestions, lang]);
+  }, [builderCategories, lang]);
 
-  // ── Always-fresh refs (updated every render) ──────────
-  // showResults uses scores/teamNames/etc. from latest render
+  // Always-fresh refs
   showResultsRef.current = () => {
     stopTimer();
     let color = '#ffd60a';
-    if (scores[0] > scores[1]) color = '#e63946';
-    else if (scores[1] > scores[0]) color = '#1d7cc4';
+    if (scores[0] > scores[1]) color = '#ff2d55';
+    else if (scores[1] > scores[0]) color = '#0a84ff';
     setConfettiColor(color);
     setConfettiActive(true);
 
@@ -357,7 +430,6 @@ export function useGame(): GameAPI {
     }
   };
 
-  // ── Handle answer ─────────────────────────────────────
   const handleAnswer = useCallback((chosen: number) => {
     if (answered) return;
     stopTimer();
@@ -390,7 +462,6 @@ export function useGame(): GameAPI {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answered, questions, currentQ, activeTeam, teamNames, lang, t, stopTimer]);
 
-  // ── Results / Play again ──────────────────────────────
   const playAgain = useCallback(() => {
     setConfettiActive(false);
     setCurrentQ(0);
@@ -413,7 +484,6 @@ export function useGame(): GameAPI {
     setScreen('home');
   }, [stopTimer]);
 
-  // ── Quit ─────────────────────────────────────────────
   const confirmQuit = useCallback(() => {
     stopTimer();
     setConfettiActive(false);
@@ -425,22 +495,27 @@ export function useGame(): GameAPI {
     screen, lang, t, toggleLang,
     user, goWelcome, goLogin, goGuest, doLogin, doLogout,
     difficulty, setDifficulty, gameMode, setGameMode,
-    customQuestions, goBuilder, addCustomQuestion, deleteCustomQuestion,
+    builderCategories, goBuilder, addBuilderCategory, deleteBuilderCategory,
+    addQuestionToCategory, deleteQuestionFromCategory,
     leaderboard, goLeaderboard, clearLeaderboard,
+    isLoading, apiError, clearApiError: () => setApiError(null),
     startGame, startCustomGame,
     questions, currentQ, scores, teamNames, activeTeam, isTransfer,
     timeLeft, timerDuration, optStates, feedback,
     handleAnswer,
     gameDiff, playAgain, goHome,
     confettiActive, confettiColor,
-    quitModal, clearModal, addQModal,
-    openQuitModal:  () => setQuitModal(true),
-    closeQuitModal: () => setQuitModal(false),
+    quitModal, clearModal, addQModal, addQCategoryId, addCategoryModal,
+    openQuitModal:         () => setQuitModal(true),
+    closeQuitModal:        () => setQuitModal(false),
     confirmQuit,
-    openClearModal:  () => setClearModal(true),
-    closeClearModal: () => setClearModal(false),
-    openAddQModal:   () => setAddQModal(true),
-    closeAddQModal:  () => setAddQModal(false),
+    openClearModal:        () => setClearModal(true),
+    closeClearModal:       () => setClearModal(false),
+    openAddQModal:         (categoryId: string) => { setAddQCategoryId(categoryId); setAddQModal(true); },
+    closeAddQModal:        () => { setAddQModal(false); setAddQCategoryId(null); },
+    openAddCategoryModal:  () => setAddCategoryModal(true),
+    closeAddCategoryModal: () => setAddCategoryModal(false),
     circumference: CIRC,
+    formatDate,
   };
 }

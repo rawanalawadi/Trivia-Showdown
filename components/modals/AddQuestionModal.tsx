@@ -4,24 +4,21 @@ import { useState } from 'react';
 import Modal from './Modal';
 import type { GameAPI } from '@/hooks/useGame';
 
-const CATEGORIES = [
-  { key: 'cat_geo',  val: 'Geography' },
-  { key: 'cat_hist', val: 'History' },
-  { key: 'cat_sci',  val: 'Science' },
-  { key: 'cat_food', val: 'Food & Drink' },
-  { key: 'cat_ani',  val: 'Animals' },
-  { key: 'cat_gen',  val: 'General' },
-];
-
 export default function AddQuestionModal({ g }: { g: GameAPI }) {
   const [qText, setQText]     = useState('');
   const [opts,  setOpts]      = useState(['', '', '', '']);
-  const [cat,   setCat]       = useState('Geography');
   const [correct, setCorrect] = useState<number | null>(null);
   const [errors, setErrors]   = useState({ text: false, opts: false, correct: false });
 
+  const activeCat = g.builderCategories.find(c => c.id === g.addQCategoryId);
+
   function setOpt(i: number, val: string) {
     setOpts(prev => prev.map((o, idx) => idx === i ? val : o));
+  }
+
+  function reset() {
+    setQText(''); setOpts(['', '', '', '']); setCorrect(null);
+    setErrors({ text: false, opts: false, correct: false });
   }
 
   function submit() {
@@ -31,25 +28,34 @@ export default function AddQuestionModal({ g }: { g: GameAPI }) {
       correct: correct === null,
     };
     setErrors(e);
-    if (e.text || e.opts || e.correct) return;
+    if (e.text || e.opts || e.correct || !g.addQCategoryId) return;
 
-    g.addCustomQuestion({ question: qText.trim(), options: opts.map(o => o.trim()), answer: correct!, category: cat });
+    g.addQuestionToCategory(g.addQCategoryId, {
+      question: qText.trim(),
+      options: opts.map(o => o.trim()),
+      answer: correct!,
+      category: activeCat?.name ?? '',
+    });
 
-    // Reset
-    setQText(''); setOpts(['', '', '', '']); setCat('Geography'); setCorrect(null);
-    setErrors({ text: false, opts: false, correct: false });
+    reset();
     g.closeAddQModal();
   }
 
-  function handleClose() {
-    setQText(''); setOpts(['', '', '', '']); setCat('Geography'); setCorrect(null);
-    setErrors({ text: false, opts: false, correct: false });
-    g.closeAddQModal();
-  }
+  function handleClose() { reset(); g.closeAddQModal(); }
 
   return (
     <Modal open={g.addQModal}>
       <div className="modal-title">{g.t('addq_title')}</div>
+
+      {activeCat && (
+        <div className="modal-cat-tag">
+          {activeCat.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={activeCat.imageUrl} alt="" style={{ width: 20, height: 20, borderRadius: 5, objectFit: 'cover' }} />
+          )}
+          <span>{g.t('addq_for_cat')} <strong>{activeCat.name}</strong></span>
+        </div>
+      )}
 
       {/* Question text */}
       <div className="field">
@@ -63,16 +69,6 @@ export default function AddQuestionModal({ g }: { g: GameAPI }) {
           onChange={e => { setQText(e.target.value); setErrors(v => ({ ...v, text: false })); }}
         />
         {errors.text && <span className="err-msg">{g.t('err_q_text')}</span>}
-      </div>
-
-      {/* Category */}
-      <div className="field">
-        <label>{g.t('lbl_q_cat')}</label>
-        <select className="input" value={cat} onChange={e => setCat(e.target.value)}>
-          {CATEGORIES.map(c => (
-            <option key={c.val} value={c.val}>{g.t(c.key)}</option>
-          ))}
-        </select>
       </div>
 
       {/* Options */}

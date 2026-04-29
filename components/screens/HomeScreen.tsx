@@ -9,12 +9,26 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
   const loggedIn = !!g.user;
   const isCustom = loggedIn && g.gameMode === 'custom';
 
+  const completeCats = g.builderCategories.filter(c => c.questions.length === 6);
+  const canPlayCustom = completeCats.length >= 1;
+
   function handleStart() {
     if (isCustom) {
       g.startCustomGame(t1, t2);
     } else {
       g.startGame(t1, t2);
     }
+  }
+
+  if (g.isLoading) {
+    return (
+      <div className="screen" style={{ justifyContent: 'center', minHeight: '60vh' }}>
+        <div className="loading-overlay">
+          <div className="spinner" />
+          <span>{g.t('lbl_loading')}</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -32,6 +46,13 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
           </button>
         )}
       </div>
+
+      {/* API error notice */}
+      {g.apiError && (
+        <div className="feedback show fb-timeout" style={{ pointerEvents: 'auto' }}>
+          {g.t(g.apiError)}
+        </div>
+      )}
 
       {/* Game mode (logged-in only) */}
       {loggedIn && (
@@ -101,14 +122,14 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
       <button
         className="btn btn-gold btn-full"
         onClick={handleStart}
-        disabled={isCustom && g.customQuestions.length < 3}
+        disabled={isCustom && !canPlayCustom}
       >
         {g.t('btn_start')}
       </button>
 
       {/* Custom builder link (logged in) */}
       {loggedIn && (
-        <button className="btn btn-outline btn-full" onClick={g.goBuilder}>
+        <button className="btn btn-purple btn-full" onClick={g.goBuilder}>
           {g.t('btn_build')}
         </button>
       )}

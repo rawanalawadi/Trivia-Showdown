@@ -11,6 +11,7 @@ import ResultsScreen    from './screens/ResultsScreen';
 import QuitModal        from './modals/QuitModal';
 import ClearModal       from './modals/ClearModal';
 import AddQuestionModal from './modals/AddQuestionModal';
+import AddCategoryModal from './modals/AddCategoryModal';
 import Confetti         from './Confetti';
 
 export default function TriviaGame() {
@@ -18,10 +19,12 @@ export default function TriviaGame() {
 
   return (
     <div className="app">
-      {/* Language toggle — always visible */}
-      <button className="lang-btn" onClick={g.toggleLang}>
-        {g.lang === 'en' ? 'عربي' : 'English'}
-      </button>
+      {/* Sticky top bar — language toggle always visible, never overlaps content */}
+      <div className="app-topbar">
+        <button className="lang-btn" onClick={g.toggleLang}>
+          {g.lang === 'en' ? 'عربي' : 'English'}
+        </button>
+      </div>
 
       {/* Screens — only one active at a time */}
       {g.screen === 'welcome'     && <WelcomeScreen    g={g} />}
@@ -32,12 +35,12 @@ export default function TriviaGame() {
       {g.screen === 'game'        && <GameScreen        g={g} />}
       {g.screen === 'results'     && <ResultsScreen     g={g} />}
 
-      {/* Modals — rendered outside screen flow */}
+      {/* Modals */}
       <QuitModal        g={g} />
       <ClearModal       g={g} />
       <AddQuestionModal g={g} />
+      <AddCategoryModal g={g} />
 
-      {/* Confetti — layered above everything on results */}
       <Confetti active={g.confettiActive} color={g.confettiColor} />
     </div>
   );
