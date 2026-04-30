@@ -1,3 +1,7 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { fetchWikiSummary, type WikiSummary } from '@/lib/wikipedia';
 import type { GameAPI } from '@/hooks/useGame';
 
 const LABELS = ['A', 'B', 'C', 'D'] as const;
@@ -5,6 +9,19 @@ const CIRC = 2 * Math.PI * 27;
 
 export default function GameScreen({ g }: { g: GameAPI }) {
   const q = g.questions[g.currentQ];
+
+  const [wikiCard, setWikiCard] = useState<WikiSummary | null>(null);
+
+  // Fetch a Wikipedia snippet whenever an answer is revealed; clear on new question
+  useEffect(() => {
+    if (!q || !g.feedback) {
+      setWikiCard(null);
+      return;
+    }
+    fetchWikiSummary(q.cat.en).then(setWikiCard);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [g.feedback]);
+
   if (!q) return null;
 
   const lang     = g.lang;
@@ -28,14 +45,13 @@ export default function GameScreen({ g }: { g: GameAPI }) {
         </button>
       </div>
 
-      {/* Scoreboard — two team cards only */}
+      {/* Scoreboard */}
       <div className="scoreboard">
         <div className={`score-card${g.activeTeam === 0 ? ' at1' : ''}`}>
           <div className="score-lbl">{g.t('score_lbl')}</div>
           <div className="score-name t1">{g.teamNames[0]}</div>
           <div className="score-pts">{g.scores[0]}</div>
         </div>
-
         <div className={`score-card${g.activeTeam === 1 ? ' at2' : ''}`}>
           <div className="score-lbl">{g.t('score_lbl')}</div>
           <div className="score-name t2">{g.teamNames[1]}</div>
@@ -43,7 +59,7 @@ export default function GameScreen({ g }: { g: GameAPI }) {
         </div>
       </div>
 
-      {/* Timer + turn badge — centered below scoreboard */}
+      {/* Timer + turn badge */}
       <div className="timer-row">
         <div className="timer-ring">
           <svg className="timer-svg" viewBox="0 0 64 64">
@@ -100,6 +116,21 @@ export default function GameScreen({ g }: { g: GameAPI }) {
       <div className={`feedback${g.feedback ? ' show fb-' + g.feedback.type : ''}`}>
         {g.feedback?.msg ?? ''}
       </div>
+
+      {/* Wikipedia "Did you know?" — appears after every answer, fades in */}
+      {wikiCard && g.feedback && (
+        <div className="wiki-card">
+          {wikiCard.thumbnail && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={wikiCard.thumbnail.source} alt="" className="wiki-card-thumb" />
+          )}
+          <div className="wiki-card-body">
+            <div className="wiki-card-label">📖 Did you know?</div>
+            <div className="wiki-card-title">{wikiCard.title}</div>
+            <div className="wiki-card-text">{wikiCard.extract}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
