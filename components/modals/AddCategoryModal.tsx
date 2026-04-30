@@ -2,14 +2,20 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import { searchPexels, type PexelsPhoto } from '@/lib/pexels';
 import type { GameAPI } from '@/hooks/useGame';
 
 export default function AddCategoryModal({ g }: { g: GameAPI }) {
-  const [name,     setName]     = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [nameErr,  setNameErr]  = useState(false);
+  const [name,          setName]          = useState('');
+  const [imageUrl,      setImageUrl]      = useState('');
+  const [nameErr,       setNameErr]       = useState(false);
+  const [pexelsPhotos,  setPexelsPhotos]  = useState<PexelsPhoto[]>([]);
+  const [pexelsLoading, setPexelsLoading] = useState(false);
 
-  function reset() { setName(''); setImageUrl(''); setNameErr(false); }
+  function reset() {
+    setName(''); setImageUrl(''); setNameErr(false);
+    setPexelsPhotos([]); setPexelsLoading(false);
+  }
 
   function submit() {
     if (!name.trim()) { setNameErr(true); return; }
@@ -20,10 +26,19 @@ export default function AddCategoryModal({ g }: { g: GameAPI }) {
 
   function handleClose() { reset(); g.closeAddCategoryModal(); }
 
+  async function handlePexelsSearch() {
+    const query = name.trim() || 'trivia';
+    setPexelsLoading(true);
+    const photos = await searchPexels(query);
+    setPexelsPhotos(photos);
+    setPexelsLoading(false);
+  }
+
   return (
     <Modal open={g.addCategoryModal}>
       <div className="modal-title">{g.t('addcat_title')}</div>
 
+      {/* Category name */}
       <div className="field">
         <label>{g.t('lbl_cat_name')}</label>
         <input
@@ -38,16 +53,47 @@ export default function AddCategoryModal({ g }: { g: GameAPI }) {
         {nameErr && <span className="err-msg">{g.t('err_cat_name')}</span>}
       </div>
 
+      {/* Image URL + Pexels search */}
       <div className="field">
         <label>{g.t('lbl_cat_image')}</label>
-        <input
-          className="input"
-          type="url"
-          placeholder={g.t('ph_cat_image')}
-          value={imageUrl}
-          onChange={e => setImageUrl(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submit()}
-        />
+
+        <div className="pexels-search-row">
+          <input
+            className="input"
+            type="url"
+            placeholder={g.t('ph_cat_image')}
+            value={imageUrl}
+            onChange={e => { setImageUrl(e.target.value); }}
+            onKeyDown={e => e.key === 'Enter' && submit()}
+          />
+          <button
+            className="btn btn-outline btn-sm"
+            type="button"
+            onClick={handlePexelsSearch}
+            disabled={pexelsLoading}
+            style={{ flexShrink: 0 }}
+          >
+            {pexelsLoading ? '…' : g.t('pexels_find')}
+          </button>
+        </div>
+
+        {/* Pexels photo grid */}
+        {pexelsPhotos.length > 0 && (
+          <div className="pexels-grid">
+            {pexelsPhotos.map(p => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={p.id}
+                src={p.src.small}
+                alt={p.alt}
+                className={`pexels-photo${imageUrl === p.src.medium ? ' selected' : ''}`}
+                onClick={() => setImageUrl(p.src.medium)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* URL preview */}
         {imageUrl && (
           <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}

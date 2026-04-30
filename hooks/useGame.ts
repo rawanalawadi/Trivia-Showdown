@@ -152,6 +152,7 @@ export function useGame(): GameAPI {
 
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [otdbToken, setOtdbToken] = useState<string | null>(null);
 
   const [quitModal, setQuitModal] = useState(false);
   const [clearModal, setClearModal] = useState(false);
@@ -196,6 +197,14 @@ export function useGame(): GameAPI {
       })
       .catch(() => {})
       .finally(() => setCategoriesLoading(false));
+  }, []);
+
+  // Request an OpenTDB session token on mount — prevents repeat questions
+  useEffect(() => {
+    fetch('https://opentdb.com/api_token.php?command=request')
+      .then(r => r.json())
+      .then(d => { if (d.response_code === 0) setOtdbToken(d.token as string); })
+      .catch(() => {});
   }, []);
 
   // Restore session from localStorage
@@ -369,14 +378,22 @@ export function useGame(): GameAPI {
     const catIds = selectedCategories;
     const totalAmount = 30;
 
+    const tokenSuffix = otdbToken ? `&token=${otdbToken}` : '';
     const urls = catIds.length > 0
       ? catIds.map(id =>
-          `https://opentdb.com/api.php?amount=${Math.max(5, Math.ceil(totalAmount / catIds.length))}&category=${id}&type=multiple&difficulty=${difficulty}`
+          `https://opentdb.com/api.php?amount=${Math.max(5, Math.ceil(totalAmount / catIds.length))}&category=${id}&type=multiple&difficulty=${difficulty}${tokenSuffix}`
         )
-      : [`https://opentdb.com/api.php?amount=${totalAmount}&type=multiple&difficulty=${difficulty}`];
+      : [`https://opentdb.com/api.php?amount=${totalAmount}&type=multiple&difficulty=${difficulty}${tokenSuffix}`];
 
     Promise.all(urls.map(url => fetch(url).then(r => r.json())))
       .then((results: Array<{ response_code: number; results: TDBResult[] }>) => {
+        // Token exhausted (code 4) — reset it silently so next game gets fresh questions
+        if (otdbToken && results.some(d => d.response_code === 4)) {
+          fetch(`https://opentdb.com/api_token.php?command=reset&token=${otdbToken}`)
+            .then(r => r.json())
+            .then(d => { if (d.response_code === 0) setOtdbToken(d.token as string); })
+            .catch(() => {});
+        }
         const qs = results.flatMap(d =>
           d.response_code === 0 && d.results ? d.results.map(mapTDBQuestion) : []
         );
@@ -389,7 +406,7 @@ export function useGame(): GameAPI {
       })
       .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficulty, selectedCategories, lang]);
+  }, [difficulty, selectedCategories, lang, otdbToken]);
 
   const startCustomGame = useCallback((t1: string, t2: string) => {
     const qs: Question[] = shuffle(

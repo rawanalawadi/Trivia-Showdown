@@ -703,6 +703,99 @@ tr:hover td { background: rgba(255,255,255,.3); }
 .cf-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
 
 /* ══════════════════════════════════════════════════
+   GIPHY — CELEBRATION GIF
+══════════════════════════════════════════════════ */
+/* Small GIF shown inside the correct-answer feedback bar */
+.feedback-gif {
+  display: block;
+  width: 90px;
+  height: auto;
+  border-radius: 10px;
+  margin: 8px auto 0;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* Full-width GIF shown on the results screen */
+.results-gif {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 4px 0;
+}
+.results-gif img {
+  width: min(260px, 85%);
+  height: auto;
+  border-radius: 18px;
+  box-shadow: 0 6px 24px var(--shadow);
+}
+
+/* ══════════════════════════════════════════════════
+   WIKIPEDIA — "DID YOU KNOW?" CARD
+══════════════════════════════════════════════════ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.wiki-card {
+  width: 100%;
+  background: rgba(255,255,255,.55);
+  border: 1px solid var(--surface);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  animation: fadeIn .35s ease;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+.wiki-card-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.wiki-card-body  { flex: 1; min-width: 0; }
+.wiki-card-label {
+  font-size: .65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+.wiki-card-title {
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.wiki-card-text  { font-size: .75rem; color: var(--muted); line-height: 1.45; }
+
+/* ══════════════════════════════════════════════════
+   PEXELS — IMAGE PICKER
+══════════════════════════════════════════════════ */
+.pexels-search-row { display: flex; gap: 8px; align-items: stretch; }
+.pexels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.pexels-photo {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: border-color .15s, transform .12s, box-shadow .15s;
+  box-shadow: 0 2px 6px var(--shadow);
+}
+.pexels-photo:hover    { transform: scale(1.04); box-shadow: 0 4px 12px var(--shadow); }
+.pexels-photo.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ══════════════════════════════════════════════════
    RTL OVERRIDES
 ══════════════════════════════════════════════════ */
 [dir=rtl] .opt-btn          { text-align: right; }
