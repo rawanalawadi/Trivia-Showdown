@@ -703,33 +703,6 @@ tr:hover td { background: rgba(255,255,255,.3); }
 .cf-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
 
 /* ══════════════════════════════════════════════════
-   GIPHY — CELEBRATION GIF
-══════════════════════════════════════════════════ */
-/* Small GIF shown inside the correct-answer feedback bar */
-.feedback-gif {
-  display: block;
-  width: 90px;
-  height: auto;
-  border-radius: 10px;
-  margin: 8px auto 0;
-  box-shadow: 0 2px 8px var(--shadow);
-}
-
-/* Full-width GIF shown on the results screen */
-.results-gif {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  margin: 4px 0;
-}
-.results-gif img {
-  width: min(260px, 85%);
-  height: auto;
-  border-radius: 18px;
-  box-shadow: 0 6px 24px var(--shadow);
-}
-
-/* ══════════════════════════════════════════════════
    WIKIPEDIA — "DID YOU KNOW?" CARD
 ══════════════════════════════════════════════════ */
 @keyframes fadeIn {
@@ -772,28 +745,6 @@ tr:hover td { background: rgba(255,255,255,.3); }
 }
 .wiki-card-text  { font-size: .75rem; color: var(--muted); line-height: 1.45; }
 
-/* ══════════════════════════════════════════════════
-   PEXELS — IMAGE PICKER
-══════════════════════════════════════════════════ */
-.pexels-search-row { display: flex; gap: 8px; align-items: stretch; }
-.pexels-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  margin-top: 8px;
-}
-.pexels-photo {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  border-radius: 10px;
-  cursor: pointer;
-  border: 3px solid transparent;
-  transition: border-color .15s, transform .12s, box-shadow .15s;
-  box-shadow: 0 2px 6px var(--shadow);
-}
-.pexels-photo:hover    { transform: scale(1.04); box-shadow: 0 4px 12px var(--shadow); }
-.pexels-photo.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
 /* ══════════════════════════════════════════════════
    RTL OVERRIDES

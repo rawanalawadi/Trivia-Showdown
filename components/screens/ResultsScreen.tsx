@@ -1,16 +1,6 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { fetchRandomGif } from '@/lib/giphy';
 import type { GameAPI } from '@/hooks/useGame';
 
 export default function ResultsScreen({ g }: { g: GameAPI }) {
-  const [celebGif, setCelebGif] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchRandomGif('celebration confetti party winner').then(setCelebGif);
-  }, []);
-
   const [s0, s1] = g.scores;
   let bannerCls = 'winner-banner wb-draw';
   let bannerTxt = g.t('draw_msg');
@@ -21,13 +11,6 @@ export default function ResultsScreen({ g }: { g: GameAPI }) {
     <div className="screen" style={{ paddingTop: 20, textAlign: 'center' }}>
       <div className="results-title">{g.t('results_title')}</div>
       <div className={bannerCls}>{bannerTxt}</div>
-
-      {celebGif && (
-        <div className="results-gif">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={celebGif} alt="🎉" />
-        </div>
-      )}
 
       <div className="final-scores">
         <div className={`fs-card${s0 > s1 ? ' winner' : ''}`}>

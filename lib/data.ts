@@ -141,7 +141,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     lbl_loading:'Loading questions…',
     err_api:'Could not load questions from web. Using built-in set instead.',
     btn_retry:'Try Again',
-    pexels_find:'📷 Find Photos',
   },
   ar: {
     app_title:'مسابقة عائلية', app_sub:'لعبة للجميع',
@@ -241,7 +240,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     lbl_loading:'جارٍ تحميل الأسئلة…',
     err_api:'تعذّر تحميل أسئلة الإنترنت. تم استخدام الأسئلة الاحتياطية.',
     btn_retry:'إعادة المحاولة',
-    pexels_find:'📷 بحث عن صور',
   },
 };
 

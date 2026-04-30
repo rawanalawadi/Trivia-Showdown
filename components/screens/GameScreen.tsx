@@ -1,8 +1,3 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { fetchRandomGif } from '@/lib/giphy';
-import { fetchWikiSummary, type WikiSummary } from '@/lib/wikipedia';
 import type { GameAPI } from '@/hooks/useGame';
 
 const LABELS = ['A', 'B', 'C', 'D'] as const;
@@ -10,28 +5,6 @@ const CIRC = 2 * Math.PI * 27;
 
 export default function GameScreen({ g }: { g: GameAPI }) {
   const q = g.questions[g.currentQ];
-
-  const [correctGif, setCorrectGif] = useState<string | null>(null);
-  const [wikiCard,   setWikiCard]   = useState<WikiSummary | null>(null);
-
-  // Fetch GIF + Wikipedia snippet whenever a new feedback appears
-  useEffect(() => {
-    if (!q || !g.feedback) {
-      setCorrectGif(null);
-      setWikiCard(null);
-      return;
-    }
-    // Wikipedia: fetch for the question's category (works for any result)
-    fetchWikiSummary(q.cat.en).then(setWikiCard);
-    // Giphy: only on correct answer
-    if (g.feedback.type === 'correct') {
-      fetchRandomGif('correct answer winner brilliant').then(setCorrectGif);
-    } else {
-      setCorrectGif(null);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [g.feedback]);
-
   if (!q) return null;
 
   const lang     = g.lang;
@@ -123,29 +96,10 @@ export default function GameScreen({ g }: { g: GameAPI }) {
         ))}
       </div>
 
-      {/* Feedback (+ optional celebration GIF) */}
+      {/* Feedback */}
       <div className={`feedback${g.feedback ? ' show fb-' + g.feedback.type : ''}`}>
         {g.feedback?.msg ?? ''}
-        {correctGif && g.feedback?.type === 'correct' && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={correctGif} alt="🎉" className="feedback-gif" />
-        )}
       </div>
-
-      {/* Wikipedia "Did you know?" card */}
-      {wikiCard && g.feedback && (
-        <div className="wiki-card">
-          {wikiCard.thumbnail && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={wikiCard.thumbnail.source} alt="" className="wiki-card-thumb" />
-          )}
-          <div className="wiki-card-body">
-            <div className="wiki-card-label">📖 Did you know?</div>
-            <div className="wiki-card-title">{wikiCard.title}</div>
-            <div className="wiki-card-text">{wikiCard.extract}</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
