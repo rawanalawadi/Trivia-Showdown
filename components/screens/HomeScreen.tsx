@@ -4,75 +4,60 @@ import { useState } from 'react';
 import type { GameAPI } from '@/hooks/useGame';
 
 const CAT_EMOJI: Record<string, string> = {
-  'General Knowledge': '🧠',
-  'Entertainment: Books': '📚',
-  'Entertainment: Film': '🎬',
-  'Entertainment: Music': '🎵',
-  'Entertainment: Musicals & Theatres': '🎭',
-  'Entertainment: Television': '📺',
-  'Entertainment: Video Games': '🎮',
-  'Entertainment: Board Games': '♟️',
-  'Science & Nature': '🔬',
-  'Science: Computers': '💻',
-  'Science: Mathematics': '🔢',
-  'Mythology': '⚡',
-  'Sports': '⚽',
-  'Geography': '🌍',
-  'History': '🏛️',
-  'Politics': '🗳️',
-  'Art': '🎨',
-  'Celebrities': '⭐',
-  'Animals': '🐾',
-  'Vehicles': '🚗',
-  'Entertainment: Comics': '💬',
-  'Science: Gadgets': '⚙️',
+  'General Knowledge': '🧠', 'Entertainment: Books': '📚',
+  'Entertainment: Film': '🎬', 'Entertainment: Music': '🎵',
+  'Entertainment: Musicals & Theatres': '🎭', 'Entertainment: Television': '📺',
+  'Entertainment: Video Games': '🎮', 'Entertainment: Board Games': '♟️',
+  'Science & Nature': '🔬', 'Science: Computers': '💻',
+  'Science: Mathematics': '🔢', 'Mythology': '⚡', 'Sports': '⚽',
+  'Geography': '🌍', 'History': '🏛️', 'Politics': '🗳️', 'Art': '🎨',
+  'Celebrities': '⭐', 'Animals': '🐾', 'Vehicles': '🚗',
+  'Entertainment: Comics': '💬', 'Science: Gadgets': '⚙️',
   'Entertainment: Japanese Anime & Manga': '🗾',
   'Entertainment: Cartoon & Animations': '🎪',
 };
+const catEmoji = (name: string) => CAT_EMOJI[name] ?? '❓';
+const catLabel = (name: string) => name.replace(/^(Entertainment|Science): /, '');
 
-function catEmoji(name: string): string {
-  return CAT_EMOJI[name] ?? '❓';
-}
-
-function catLabel(name: string): string {
-  return name.replace(/^(Entertainment|Science): /, '');
-}
-
-type Step = 1 | 2 | 3;
+const Q_OPTIONS = [10, 20, 30] as const;
 
 export default function HomeScreen({ g }: { g: GameAPI }) {
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [t1, setT1] = useState('');
   const [t2, setT2] = useState('');
 
-  const loggedIn = !!g.user;
-  const isCustom = loggedIn && g.gameMode === 'custom';
-  const completeCats = g.builderCategories.filter(c => c.questions.length === 6);
+  const loggedIn   = !!g.user;
+  const isCustom   = loggedIn && g.gameMode === 'custom';
+  const isJeopardy = g.gameStyle === 'jeopardy';
+
+  const completeCats  = g.builderCategories.filter(c => c.questions.length === 6);
   const canPlayCustom = completeCats.length >= 1;
+  const selectedCount = g.selectedCategories.length;
+  const jeopardyCats  = g.selectedCategories.slice(0, 6);
 
   function handleStart() {
-    if (isCustom) g.startCustomGame(t1, t2);
-    else          g.startGame(t1, t2);
+    if (isCustom)        g.startCustomGame(t1, t2);
+    else if (isJeopardy) g.startJeopardyGame(t1, t2);
+    else                 g.startGame(t1, t2);
   }
 
-  // Loading screen while fetching questions
+  const steps = isJeopardy
+    ? [g.t('step_teams'), g.t('style_title'), g.t('step_jeopardy_cats')]
+    : [g.t('step_teams'), g.t('style_title'), g.t('step_settings'), g.t('step_categories')];
+  const totalSteps = steps.length;
+
   if (g.isLoading) {
     return (
       <div className="screen" style={{ justifyContent: 'center', minHeight: '60vh' }}>
-        <div className="loading-overlay">
-          <div className="spinner" />
-          <span>{g.t('lbl_loading')}</span>
-        </div>
+        <div className="loading-overlay"><div className="spinner" /><span>{g.t('lbl_loading')}</span></div>
       </div>
     );
   }
 
-  const selectedCount = g.selectedCategories.length;
-
   return (
     <div className="screen" style={{ paddingTop: 10 }}>
 
-      {/* Header row: greeting + logout */}
+      {/* Header */}
       <div className="home-header">
         <div className="home-greeting">
           {loggedIn
@@ -80,49 +65,37 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
             : <span style={{ color: 'var(--muted)' }}>{g.t('home_guest')}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {loggedIn && (
-            <button className="btn btn-ghost btn-sm" onClick={g.goLeaderboard}>🏆</button>
-          )}
-          {loggedIn && (
-            <button className="btn btn-ghost btn-sm" onClick={g.doLogout}>
-              {g.t('btn_logout')}
-            </button>
-          )}
+          {loggedIn && <button className="btn btn-ghost btn-sm" onClick={g.goLeaderboard}>🏆</button>}
+          {loggedIn && <button className="btn btn-ghost btn-sm" onClick={g.doLogout}>{g.t('btn_logout')}</button>}
         </div>
       </div>
 
-      {/* API error notice */}
       {g.apiError && (
         <div className="feedback show fb-timeout" style={{ pointerEvents: 'auto' }}>
           {g.t(g.apiError)}
         </div>
       )}
 
-      {/* Custom game mode toggle (logged-in only) */}
+      {/* Game mode toggle */}
       {loggedIn && (
         <div style={{ display: 'flex', gap: 10, width: '100%' }}>
           <button
             className={`diff-btn${g.gameMode === 'ready' ? ' sel-medium' : ''}`}
             style={{ flex: 1 }}
             onClick={() => { g.setGameMode('ready'); setStep(1); }}
-          >
-            🎯 {g.t('mode_ready')}
-          </button>
+          >🎯 {g.t('mode_ready')}</button>
           <button
             className={`diff-btn${g.gameMode === 'custom' ? ' sel-easy' : ''}`}
             style={{ flex: 1 }}
             onClick={() => { g.setGameMode('custom'); setStep(1); }}
-          >
-            ✏️ {g.t('mode_custom')}
-          </button>
+          >✏️ {g.t('mode_custom')}</button>
         </div>
       )}
 
-      {/* ── CUSTOM GAME FLOW ──────────────── */}
+      {/* ── CUSTOM GAME ── */}
       {isCustom ? (
         <>
-          <div className="home-section" style={{ width: '100%' }}>
-            <div className="section-label">{g.t('lbl_teams')}</div>
+          <div style={{ width: '100%' }}>
             <div className="team-row">
               <div className="field">
                 <label className="lbl-t1">{g.t('label_t1')}</label>
@@ -136,40 +109,36 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
               </div>
             </div>
           </div>
-
           <button className="btn btn-gold btn-full" onClick={handleStart} disabled={!canPlayCustom}>
             {g.t('btn_start')}
           </button>
           <button className="btn btn-purple btn-full" onClick={g.goBuilder}>
             {g.t('btn_build')}
           </button>
-          {!canPlayCustom && (
-            <p className="builder-play-note">{g.t('builder_play_note')}</p>
-          )}
+          {!canPlayCustom && <p className="builder-play-note">{g.t('builder_play_note')}</p>}
         </>
       ) : (
-        /* ── READY-MADE 3-STEP FLOW ──────── */
+        /* ── READY-MADE / JEOPARDY WIZARD ── */
         <>
-          {/* Step indicator */}
+          {/* Dynamic step indicator */}
           <div className="step-indicator">
-            {([1, 2, 3] as Step[]).map((s, idx) => (
-              <div key={s} style={{ display: 'flex', alignItems: 'center', flex: idx < 2 ? 1 : 'none' }}>
-                <div className={`step-dot${step === s ? ' active' : step > s ? ' done' : ''}`}>
-                  {step > s ? '✓' : s}
+            {steps.map((_, idx) => {
+              const s = idx + 1;
+              return (
+                <div key={s} style={{ display: 'flex', alignItems: 'center', flex: idx < totalSteps - 1 ? 1 : 'none' }}>
+                  <div className={`step-dot${step === s ? ' active' : step > s ? ' done' : ''}`}>
+                    {step > s ? '✓' : s}
+                  </div>
+                  {idx < totalSteps - 1 && <div className={`step-line${step > s ? ' done' : ''}`} />}
                 </div>
-                {idx < 2 && <div className={`step-line${step > s ? ' done' : ''}`} />}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* ── STEP 1: TEAMS ── */}
+          {/* STEP 1 — Teams */}
           {step === 1 && (
             <div className="step-container">
-              <div className="step-heading">
-                <h2>{g.t('step_teams')}</h2>
-                <p>{g.t('step_teams_sub')}</p>
-              </div>
-
+              <div className="step-heading"><h2>{g.t('step_teams')}</h2><p>{g.t('step_teams_sub')}</p></div>
               <div className="team-row">
                 <div className="field">
                   <label className="lbl-t1">{g.t('label_t1')}</label>
@@ -184,22 +153,45 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
                     onKeyDown={e => e.key === 'Enter' && setStep(2)} />
                 </div>
               </div>
-
               <div className="step-nav">
-                <button className="btn btn-gold btn-full" onClick={() => setStep(2)}>
-                  {g.t('lbl_next')}
-                </button>
+                <button className="btn btn-gold btn-full" onClick={() => setStep(2)}>{g.t('lbl_next')}</button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 2: DIFFICULTY ── */}
+          {/* STEP 2 — Style selection */}
           {step === 2 && (
             <div className="step-container">
-              <div className="step-heading">
-                <h2>{g.t('step_difficulty')}</h2>
-                <p>{g.t('step_difficulty_sub')}</p>
+              <div className="step-heading"><h2>{g.t('style_title')}</h2><p>{g.t('style_sub')}</p></div>
+              <div className="style-cards">
+                <div
+                  className={`style-card${g.gameStyle === 'trivia' ? ' selected' : ''}`}
+                  onClick={() => g.setGameStyle('trivia')}
+                >
+                  <div className="style-card-icon">🎯</div>
+                  <div className="style-card-label">{g.t('style_trivia')}</div>
+                  <div className="style-card-desc">{g.t('style_trivia_desc')}</div>
+                </div>
+                <div
+                  className={`style-card${g.gameStyle === 'jeopardy' ? ' selected' : ''}`}
+                  onClick={() => g.setGameStyle('jeopardy')}
+                >
+                  <div className="style-card-icon">🏆</div>
+                  <div className="style-card-label">{g.t('style_jeopardy')}</div>
+                  <div className="style-card-desc">{g.t('style_jeopardy_desc')}</div>
+                </div>
               </div>
+              <div className="step-nav">
+                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep(1)}>{g.t('btn_back')}</button>
+                <button className="btn btn-gold" style={{ flex: 2 }} onClick={() => setStep(3)}>{g.t('lbl_next')}</button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3 — Trivia settings (difficulty + count) */}
+          {step === 3 && !isJeopardy && (
+            <div className="step-container">
+              <div className="step-heading"><h2>{g.t('step_settings')}</h2><p>{g.t('step_settings_sub')}</p></div>
 
               <div className="diff-cards">
                 {([
@@ -207,11 +199,7 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
                   { d: 'medium', icon: '⚡', lbl: g.t('diff_medium'), desc: g.t('diff_medium_desc') },
                   { d: 'hard',   icon: '🔥', lbl: g.t('diff_hard'),   desc: g.t('diff_hard_desc')   },
                 ] as const).map(({ d, icon, lbl, desc }) => (
-                  <div
-                    key={d}
-                    className={`diff-card${g.difficulty === d ? ` sel-${d}` : ''}`}
-                    onClick={() => g.setDifficulty(d)}
-                  >
+                  <div key={d} className={`diff-card${g.difficulty === d ? ` sel-${d}` : ''}`} onClick={() => g.setDifficulty(d)}>
                     <div className="diff-card-icon">{icon}</div>
                     <div className="diff-card-label">{lbl}</div>
                     <div className="diff-card-desc">{desc}</div>
@@ -219,24 +207,73 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
                 ))}
               </div>
 
+              <div style={{ width: '100%' }}>
+                <div className="section-label" style={{ marginBottom: 10 }}>{g.t('step_count_label')}</div>
+                <div className="q-count-row">
+                  {Q_OPTIONS.map(n => (
+                    <button key={n}
+                      className={`q-count-btn${g.numQuestions === n ? ' selected' : ''}`}
+                      onClick={() => g.setNumQuestions(n)}
+                    >{n}</button>
+                  ))}
+                </div>
+              </div>
+
               <div className="step-nav">
-                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep(1)}>
-                  {g.t('btn_back')}
-                </button>
-                <button className="btn btn-gold" style={{ flex: 2 }} onClick={() => setStep(3)}>
-                  {g.t('lbl_next')}
+                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep(2)}>{g.t('btn_back')}</button>
+                <button className="btn btn-gold" style={{ flex: 2 }} onClick={() => setStep(4)}>{g.t('lbl_next')}</button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3 — Jeopardy categories (max 6) */}
+          {step === 3 && isJeopardy && (
+            <div className="step-container">
+              <div className="step-heading"><h2>{g.t('step_jeopardy_cats')}</h2><p>{g.t('step_jeopardy_cats_sub')}</p></div>
+
+              <div className="cat-select-toolbar">
+                <span className="cat-select-info">
+                  {jeopardyCats.length > 0
+                    ? <><strong>{jeopardyCats.length}</strong> / 6 selected</>
+                    : <span>{g.t('cats_none_hint')}</span>}
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={g.clearCategories}>{g.t('cat_clear')}</button>
+              </div>
+
+              {g.categoriesLoading ? (
+                <div className="loading-overlay"><div className="spinner" /><span>{g.t('cats_loading')}</span></div>
+              ) : (
+                <div className="cat-grid-select">
+                  {g.availableCategories.map(cat => {
+                    const isSel    = g.selectedCategories.includes(cat.id);
+                    const atLimit  = jeopardyCats.length >= 6 && !isSel;
+                    return (
+                      <button key={cat.id}
+                        className={`cat-pill${isSel ? ' selected' : ''}${atLimit ? ' at-limit' : ''}`}
+                        onClick={() => !atLimit && g.toggleCategory(cat.id)}
+                        disabled={atLimit}
+                      >
+                        <span className="cat-pill-emoji">{catEmoji(cat.name)}</span>
+                        <span>{catLabel(cat.name)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="step-nav">
+                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep(2)}>{g.t('btn_back')}</button>
+                <button className="btn btn-gold" style={{ flex: 2 }} onClick={handleStart} disabled={jeopardyCats.length === 0}>
+                  {g.t('lbl_start')}
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 3: CATEGORIES ── */}
-          {step === 3 && (
+          {/* STEP 4 — Trivia categories */}
+          {step === 4 && !isJeopardy && (
             <div className="step-container">
-              <div className="step-heading">
-                <h2>{g.t('step_categories')}</h2>
-                <p>{g.t('step_categories_sub')}</p>
-              </div>
+              <div className="step-heading"><h2>{g.t('step_categories')}</h2><p>{g.t('step_categories_sub')}</p></div>
 
               <div className="cat-select-toolbar">
                 <span className="cat-select-info">
@@ -244,23 +281,15 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
                     ? <><strong>{selectedCount}</strong> {selectedCount === 1 ? 'topic' : 'topics'} selected</>
                     : <span>{g.t('cats_none_hint')}</span>}
                 </span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={g.clearCategories}>
-                    {g.t('cat_clear')}
-                  </button>
-                </div>
+                <button className="btn btn-ghost btn-sm" onClick={g.clearCategories}>{g.t('cat_clear')}</button>
               </div>
 
               {g.categoriesLoading ? (
-                <div className="loading-overlay">
-                  <div className="spinner" />
-                  <span>{g.t('cats_loading')}</span>
-                </div>
+                <div className="loading-overlay"><div className="spinner" /><span>{g.t('cats_loading')}</span></div>
               ) : (
-                <div className="cat-pills">
+                <div className="cat-grid-select">
                   {g.availableCategories.map(cat => (
-                    <button
-                      key={cat.id}
+                    <button key={cat.id}
                       className={`cat-pill${g.selectedCategories.includes(cat.id) ? ' selected' : ''}`}
                       onClick={() => g.toggleCategory(cat.id)}
                     >
@@ -272,19 +301,14 @@ export default function HomeScreen({ g }: { g: GameAPI }) {
               )}
 
               <div className="step-nav">
-                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep(2)}>
-                  {g.t('btn_back')}
-                </button>
-                <button className="btn btn-gold" style={{ flex: 2 }} onClick={handleStart}>
-                  {g.t('lbl_start')}
-                </button>
+                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep(3)}>{g.t('btn_back')}</button>
+                <button className="btn btn-gold" style={{ flex: 2 }} onClick={handleStart}>{g.t('lbl_start')}</button>
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* Guest promo */}
       {!loggedIn && (
         <div className="guest-promo">
           <span>{g.t('guest_promo')} </span>

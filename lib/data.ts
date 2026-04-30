@@ -138,6 +138,24 @@ export const STRINGS: Record<string, Record<string, string>> = {
     fb_steal_fail:'No steal! The answer was',
     diff_easy_lb:'Easy', diff_medium_lb:'Medium', diff_hard_lb:'Hard',
     custom_lb:'Custom',
+    // Style selection
+    style_title:'Pick Your Style', style_sub:'How do you want to play?',
+    style_trivia:'Trivia', style_trivia_desc:'Quick-fire questions one at a time',
+    style_jeopardy:'Jeopardy', style_jeopardy_desc:'Pick a category & value — teams take turns',
+    // Trivia settings step
+    step_settings:'Game Settings', step_settings_sub:'Difficulty and number of questions',
+    step_count_label:'Number of Questions',
+    // Jeopardy
+    step_jeopardy_cats:'Pick Categories', step_jeopardy_cats_sub:'Choose 1–6 topics for your board',
+    jeopardy_turn:'\'s turn — pick a category and value',
+    jeopardy_pick:'Choose a cell on the board',
+    pts:'pts',
+    // Excel import
+    btn_import_excel:'📊 Import from Excel',
+    import_hint:'Columns: Category | Question | A | B | C | D | Answer (A–D)',
+    import_success:'Questions imported successfully!',
+    import_error:'Could not read the file. Check the format and try again.',
+    btn_template:'⬇ Download Template',
     lbl_loading:'Loading questions…',
     err_api:'Could not load questions from web. Using built-in set instead.',
     btn_retry:'Try Again',
@@ -237,6 +255,24 @@ export const STRINGS: Record<string, Record<string, string>> = {
     fb_steal_fail:'فاتت الفرصة! الإجابة كانت',
     diff_easy_lb:'سهل', diff_medium_lb:'متوسط', diff_hard_lb:'صعب',
     custom_lb:'مخصصة',
+    // Style selection
+    style_title:'اختر الأسلوب', style_sub:'كيف تريد اللعب؟',
+    style_trivia:'تريفيا', style_trivia_desc:'أسئلة سريعة متتالية واحدة تلو الأخرى',
+    style_jeopardy:'جيوباردي', style_jeopardy_desc:'اختر فئة وقيمة — الفرق تتناوب',
+    // Trivia settings step
+    step_settings:'إعدادات اللعبة', step_settings_sub:'الصعوبة وعدد الأسئلة',
+    step_count_label:'عدد الأسئلة',
+    // Jeopardy
+    step_jeopardy_cats:'اختر الفئات', step_jeopardy_cats_sub:'اختر ١–٦ مواضيع للوحتك',
+    jeopardy_turn:' — اختر فئة وقيمة',
+    jeopardy_pick:'اختر خانة على اللوحة',
+    pts:'نقطة',
+    // Excel import
+    btn_import_excel:'📊 استيراد من إكسل',
+    import_hint:'الأعمدة: الفئة | السؤال | أ | ب | ج | د | الإجابة (A–D)',
+    import_success:'تم استيراد الأسئلة بنجاح!',
+    import_error:'تعذّر قراءة الملف. تحقق من التنسيق وحاول مجدداً.',
+    btn_template:'⬇ تحميل النموذج',
     lbl_loading:'جارٍ تحميل الأسئلة…',
     err_api:'تعذّر تحميل أسئلة الإنترنت. تم استخدام الأسئلة الاحتياطية.',
     btn_retry:'إعادة المحاولة',

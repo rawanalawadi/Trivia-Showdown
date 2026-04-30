@@ -7,6 +7,7 @@ import HomeScreen       from './screens/HomeScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import BuilderScreen    from './screens/BuilderScreen';
 import GameScreen       from './screens/GameScreen';
+import JeopardyScreen   from './screens/JeopardyScreen';
 import ResultsScreen    from './screens/ResultsScreen';
 import QuitModal        from './modals/QuitModal';
 import ClearModal       from './modals/ClearModal';
@@ -33,6 +34,7 @@ export default function TriviaGame() {
       {g.screen === 'leaderboard' && <LeaderboardScreen g={g} />}
       {g.screen === 'builder'     && <BuilderScreen     g={g} />}
       {g.screen === 'game'        && <GameScreen        g={g} />}
+      {g.screen === 'jeopardy'    && <JeopardyScreen    g={g} />}
       {g.screen === 'results'     && <ResultsScreen     g={g} />}
 
       {/* Modals */}

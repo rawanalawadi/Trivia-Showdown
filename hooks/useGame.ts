@@ -4,9 +4,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { QUESTIONS, STRINGS, LABELS } from '@/lib/data';
 import { lsGet, lsSet } from '@/lib/storage';
 import type {
-  Lang, Difficulty, GameMode, Screen,
+  Lang, Difficulty, GameMode, GameStyle, Screen,
   User, Question, CustomQuestion, BuilderCategory,
-  TriviaCategory, FeedbackState, OptionState, LeaderboardEntry,
+  TriviaCategory, JeopardyCell, JeopardyColumn,
+  FeedbackState, OptionState, LeaderboardEntry,
 } from '@/lib/types';
 
 const CIRC = 2 * Math.PI * 27;
@@ -69,6 +70,10 @@ export interface GameAPI {
   setDifficulty: (d: Difficulty) => void;
   gameMode: GameMode;
   setGameMode: (m: GameMode) => void;
+  gameStyle: GameStyle;
+  setGameStyle: (s: GameStyle) => void;
+  numQuestions: number;
+  setNumQuestions: (n: number) => void;
 
   // API categories
   availableCategories: TriviaCategory[];
@@ -85,6 +90,7 @@ export interface GameAPI {
   deleteBuilderCategory: (id: string) => void;
   addQuestionToCategory: (categoryId: string, q: CustomQuestion) => void;
   deleteQuestionFromCategory: (categoryId: string, qIndex: number) => void;
+  importFromExcel: (data: Array<{ name: string; questions: CustomQuestion[] }>) => void;
 
   leaderboard: LeaderboardEntry[];
   goLeaderboard: () => void;
@@ -96,6 +102,7 @@ export interface GameAPI {
 
   startGame: (t1: string, t2: string) => void;
   startCustomGame: (t1: string, t2: string) => void;
+  startJeopardyGame: (t1: string, t2: string) => void;
 
   questions: Question[];
   currentQ: number;
@@ -109,6 +116,13 @@ export interface GameAPI {
   feedback: FeedbackState | null;
 
   handleAnswer: (i: number) => void;
+
+  // Jeopardy
+  jeopardyBoard: JeopardyColumn[];
+  jeopardyActiveCol: number | null;
+  jeopardyActiveCell: number | null;
+  pickJeopardyCell: (col: number, cell: number) => void;
+  handleJeopardyAnswer: (chosen: number) => void;
 
   gameDiff: string;
   playAgain: () => void;
@@ -137,57 +151,69 @@ export interface GameAPI {
 }
 
 export function useGame(): GameAPI {
-  const [screen, setScreen] = useState<Screen>('welcome');
-  const [lang, setLang] = useState<Lang>('en');
-  const [user, setUser] = useState<User | null>(null);
+  const [screen, setScreen]         = useState<Screen>('welcome');
+  const [lang, setLang]             = useState<Lang>('en');
+  const [user, setUser]             = useState<User | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [gameMode, setGameMode] = useState<GameMode>('ready');
+  const [gameMode, setGameMode]     = useState<GameMode>('ready');
+  const [gameStyle, setGameStyle]   = useState<GameStyle>('trivia');
+  const [numQuestions, setNumQuestions] = useState<number>(20);
   const [builderCategories, setBuilderCategories] = useState<BuilderCategory[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
   // API categories
   const [availableCategories, setAvailableCategories] = useState<TriviaCategory[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [selectedCategories, setSelectedCategories]   = useState<number[]>([]);
+  const [categoriesLoading, setCategoriesLoading]     = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError]   = useState<string | null>(null);
   const [otdbToken, setOtdbToken] = useState<string | null>(null);
 
-  const [quitModal, setQuitModal] = useState(false);
-  const [clearModal, setClearModal] = useState(false);
-  const [addQModal, setAddQModal] = useState(false);
-  const [addQCategoryId, setAddQCategoryId] = useState<string | null>(null);
+  const [quitModal, setQuitModal]               = useState(false);
+  const [clearModal, setClearModal]             = useState(false);
+  const [addQModal, setAddQModal]               = useState(false);
+  const [addQCategoryId, setAddQCategoryId]     = useState<string | null>(null);
   const [addCategoryModal, setAddCategoryModal] = useState(false);
 
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentQ, setCurrentQ] = useState(0);
-  const [scores, setScores] = useState<[number, number]>([0, 0]);
-  const [teamNames, setTeamNames] = useState<[string, string]>(['Team 1', 'Team 2']);
-  const [activeTeam, setActiveTeam] = useState<0 | 1>(0);
-  const [firstTeam, setFirstTeam] = useState<0 | 1>(0);
-  const [isTransfer, setIsTransfer] = useState(false);
-  const [answered, setAnswered] = useState(false);
-  const [optStates, setOptStates] = useState<OptionState[]>(['', '', '', '']);
-  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
-  const [gameDiff, setGameDiff] = useState<string>('medium');
+  // Game state (shared by trivia + jeopardy question view)
+  const [questions, setQuestions]     = useState<Question[]>([]);
+  const [currentQ, setCurrentQ]       = useState(0);
+  const [scores, setScores]           = useState<[number, number]>([0, 0]);
+  const [teamNames, setTeamNames]     = useState<[string, string]>(['Team 1', 'Team 2']);
+  const [activeTeam, setActiveTeam]   = useState<0 | 1>(0);
+  const [firstTeam, setFirstTeam]     = useState<0 | 1>(0);
+  const [isTransfer, setIsTransfer]   = useState(false);
+  const [answered, setAnswered]       = useState(false);
+  const [optStates, setOptStates]     = useState<OptionState[]>(['', '', '', '']);
+  const [feedback, setFeedback]       = useState<FeedbackState | null>(null);
+  const [gameDiff, setGameDiff]       = useState<string>('medium');
 
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [timeLeft, setTimeLeft]         = useState(15);
   const [timerDuration, setTimerDuration] = useState(15);
-  const [timerActive, setTimerActive] = useState(false);
+  const [timerActive, setTimerActive]   = useState(false);
 
   const [confettiActive, setConfettiActive] = useState(false);
-  const [confettiColor, setConfettiColor] = useState('#e8b84b');
+  const [confettiColor, setConfettiColor]   = useState('#e8b84b');
 
-  const handleTimeoutRef = useRef<() => void>(() => {});
-  const advanceRoundRef  = useRef<() => void>(() => {});
-  const showResultsRef   = useRef<() => void>(() => {});
+  // Jeopardy-specific state
+  const [jeopardyBoard, setJeopardyBoard]         = useState<JeopardyColumn[]>([]);
+  const [jeopardyActiveCol, setJeopardyActiveCol] = useState<number | null>(null);
+  const [jeopardyActiveCell, setJeopardyActiveCell] = useState<number | null>(null);
+
+  // Always-fresh refs (avoid stale closures in async/timer callbacks)
+  const handleTimeoutRef      = useRef<() => void>(() => {});
+  const advanceRoundRef       = useRef<() => void>(() => {});
+  const showResultsRef        = useRef<() => void>(() => {});
+  const endJeopardyRef        = useRef<() => void>(() => {});
+  const handleJeopardyAnswerRef = useRef<(chosen: number) => void>(() => {});
 
   const t = useCallback((key: string): string =>
     (STRINGS[lang] as Record<string, string>)[key] ?? key,
   [lang]);
 
-  // Fetch available categories on mount
+  // ── On-mount data fetches ─────────────────────────────────
+
   useEffect(() => {
     setCategoriesLoading(true);
     fetch('https://opentdb.com/api_category.php')
@@ -199,7 +225,6 @@ export function useGame(): GameAPI {
       .finally(() => setCategoriesLoading(false));
   }, []);
 
-  // Request an OpenTDB session token on mount — prevents repeat questions
   useEffect(() => {
     fetch('https://opentdb.com/api_token.php?command=request')
       .then(r => r.json())
@@ -207,13 +232,12 @@ export function useGame(): GameAPI {
       .catch(() => {});
   }, []);
 
-  // Restore session from localStorage
+  // Restore session
   useEffect(() => {
     const savedLang = lsGet<Lang>('tq_lang', 'en');
     setLang(savedLang);
     document.documentElement.lang = savedLang;
     document.documentElement.dir  = savedLang === 'ar' ? 'rtl' : 'ltr';
-
     const savedUser = lsGet<User | null>('tq_user', null);
     if (savedUser?.mobile && savedUser?.name) {
       setUser(savedUser);
@@ -221,6 +245,17 @@ export function useGame(): GameAPI {
     }
     setLeaderboard(lsGet<LeaderboardEntry[]>('tq_leaderboard', []));
   }, []);
+
+  // Watch for jeopardy game-over (all cells used)
+  useEffect(() => {
+    if (screen !== 'jeopardy' || jeopardyBoard.length === 0 || jeopardyActiveCol !== null) return;
+    const allUsed = jeopardyBoard.every(col => col.cells.every(c => c.used));
+    if (!allUsed) return;
+    const id = window.setTimeout(() => endJeopardyRef.current(), 700);
+    return () => clearTimeout(id);
+  }, [jeopardyBoard, jeopardyActiveCol, screen]);
+
+  // ── Language ──────────────────────────────────────────────
 
   const toggleLang = useCallback(() => {
     setLang(prev => {
@@ -231,6 +266,8 @@ export function useGame(): GameAPI {
       return next;
     });
   }, []);
+
+  // ── Navigation ────────────────────────────────────────────
 
   const goWelcome = useCallback(() => setScreen('welcome'), []);
   const goLogin   = useCallback(() => setScreen('login'),   []);
@@ -273,6 +310,8 @@ export function useGame(): GameAPI {
 
   const goBuilder = useCallback(() => setScreen('builder'), []);
 
+  // ── Builder ───────────────────────────────────────────────
+
   const addBuilderCategory = useCallback((name: string, imageUrl: string) => {
     setBuilderCategories(prev => {
       const next: BuilderCategory[] = [...prev, { id: `cat-${Date.now()}`, name: name.trim(), imageUrl, questions: [] }];
@@ -313,29 +352,46 @@ export function useGame(): GameAPI {
     });
   }, [user]);
 
+  /** Batch-import categories + questions parsed from an Excel file */
+  const importFromExcel = useCallback((data: Array<{ name: string; questions: CustomQuestion[] }>) => {
+    setBuilderCategories(prev => {
+      let next = [...prev];
+      for (const { name, questions } of data) {
+        let cat = next.find(c => c.name.toLowerCase() === name.toLowerCase());
+        if (!cat) {
+          cat = { id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: name.trim(), imageUrl: '', questions: [] };
+          next = [...next, cat];
+        }
+        const slots = 6 - cat.questions.length;
+        if (slots > 0) {
+          const toAdd = questions.slice(0, slots);
+          next = next.map(c => c.id === cat!.id ? { ...c, questions: [...c.questions, ...toAdd] } : c);
+        }
+      }
+      if (user) lsSet(`tq_categories_${user.mobile}`, next);
+      return next;
+    });
+  }, [user]);
+
+  // ── Categories ────────────────────────────────────────────
+
   const toggleCategory = useCallback((id: number) => {
     setSelectedCategories(prev =>
       prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
     );
   }, []);
 
-  const selectAllCategories = useCallback(() => {
-    setSelectedCategories(prev => {
-      // If all are already selected, clear; otherwise select all
-      return prev.length === 0 ? prev : [];
-    });
-  }, []);
+  const selectAllCategories = useCallback(() => setSelectedCategories([]), []);
+  const clearCategories      = useCallback(() => setSelectedCategories([]), []);
 
-  const clearCategories = useCallback(() => setSelectedCategories([]), []);
+  // ── Timer ─────────────────────────────────────────────────
 
-  // Timer tick
   useEffect(() => {
     if (!timerActive || timeLeft <= 0) return;
     const id = window.setTimeout(() => setTimeLeft(t => Math.max(0, t - 1)), 1000);
     return () => clearTimeout(id);
   }, [timerActive, timeLeft]);
 
-  // Timeout trigger
   useEffect(() => {
     if (!timerActive || timeLeft > 0) return;
     setTimerActive(false);
@@ -349,6 +405,8 @@ export function useGame(): GameAPI {
   };
 
   const stopTimer = useCallback(() => setTimerActive(false), []);
+
+  // ── Game init ─────────────────────────────────────────────
 
   const initGame = (qs: Question[], diff: string, t1: string, t2: string) => {
     const names: [string, string] = [
@@ -371,14 +429,16 @@ export function useGame(): GameAPI {
     startTimer(15);
   };
 
+  // ── Start Trivia ──────────────────────────────────────────
+
   const startGame = useCallback((t1: string, t2: string) => {
     setIsLoading(true);
     setApiError(null);
 
-    const catIds = selectedCategories;
-    const totalAmount = 30;
-
+    const catIds      = selectedCategories;
+    const totalAmount = numQuestions;
     const tokenSuffix = otdbToken ? `&token=${otdbToken}` : '';
+
     const urls = catIds.length > 0
       ? catIds.map(id =>
           `https://opentdb.com/api.php?amount=${Math.max(5, Math.ceil(totalAmount / catIds.length))}&category=${id}&type=multiple&difficulty=${difficulty}${tokenSuffix}`
@@ -387,7 +447,6 @@ export function useGame(): GameAPI {
 
     Promise.all(urls.map(url => fetch(url).then(r => r.json())))
       .then((results: Array<{ response_code: number; results: TDBResult[] }>) => {
-        // Token exhausted (code 4) — reset it silently so next game gets fresh questions
         if (otdbToken && results.some(d => d.response_code === 4)) {
           fetch(`https://opentdb.com/api_token.php?command=reset&token=${otdbToken}`)
             .then(r => r.json())
@@ -406,7 +465,9 @@ export function useGame(): GameAPI {
       })
       .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficulty, selectedCategories, lang, otdbToken]);
+  }, [difficulty, selectedCategories, lang, otdbToken, numQuestions]);
+
+  // ── Start Custom Game ─────────────────────────────────────
 
   const startCustomGame = useCallback((t1: string, t2: string) => {
     const qs: Question[] = shuffle(
@@ -424,7 +485,82 @@ export function useGame(): GameAPI {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builderCategories, lang]);
 
-  // Always-fresh refs
+  // ── Start Jeopardy ────────────────────────────────────────
+
+  const startJeopardyGame = useCallback((t1: string, t2: string) => {
+    setIsLoading(true);
+    setApiError(null);
+
+    const catIds      = selectedCategories.slice(0, 6);
+    const tokenSuffix = otdbToken ? `&token=${otdbToken}` : '';
+
+    if (catIds.length === 0) {
+      setApiError('err_api');
+      setIsLoading(false);
+      return;
+    }
+
+    // 3 requests per category: easy×2, medium×2, hard×2
+    const requests = catIds.flatMap(id => [
+      fetch(`https://opentdb.com/api.php?amount=2&category=${id}&type=multiple&difficulty=easy${tokenSuffix}`).then(r => r.json()),
+      fetch(`https://opentdb.com/api.php?amount=2&category=${id}&type=multiple&difficulty=medium${tokenSuffix}`).then(r => r.json()),
+      fetch(`https://opentdb.com/api.php?amount=2&category=${id}&type=multiple&difficulty=hard${tokenSuffix}`).then(r => r.json()),
+    ]);
+
+    Promise.all(requests)
+      .then(results => {
+        const fallback = (pts: number, diff: Difficulty): JeopardyCell => ({
+          question: shuffle([...QUESTIONS[diff]])[0] ?? QUESTIONS.medium[0],
+          points: pts, difficulty: diff, used: false,
+        });
+
+        const board: JeopardyColumn[] = catIds.map((id, ci) => {
+          const catInfo = availableCategories.find(c => c.id === id);
+          const r3 = results.slice(ci * 3, ci * 3 + 3);
+
+          const toCell = (r: TDBResult, pts: number, diff: Difficulty): JeopardyCell =>
+            ({ question: mapTDBQuestion(r), points: pts, difficulty: diff, used: false });
+
+          const easyCells  = (r3[0]?.response_code === 0 ? (r3[0].results as TDBResult[]) : []).slice(0, 2).map(r => toCell(r, 100, 'easy'));
+          const medCells   = (r3[1]?.response_code === 0 ? (r3[1].results as TDBResult[]) : []).slice(0, 2).map(r => toCell(r, 200, 'medium'));
+          const hardCells  = (r3[2]?.response_code === 0 ? (r3[2].results as TDBResult[]) : []).slice(0, 2).map(r => toCell(r, 300, 'hard'));
+
+          while (easyCells.length  < 2) easyCells.push(fallback(100, 'easy'));
+          while (medCells.length   < 2) medCells.push(fallback(200, 'medium'));
+          while (hardCells.length  < 2) hardCells.push(fallback(300, 'hard'));
+
+          return {
+            categoryId:   id,
+            categoryName: (catInfo?.name ?? `Category ${ci + 1}`).replace(/^(Entertainment|Science):\s*/i, ''),
+            cells: [...easyCells, ...medCells, ...hardCells],
+          };
+        });
+
+        const names: [string, string] = [
+          t1.trim() || (lang === 'ar' ? 'الفريق الأول' : 'Team 1'),
+          t2.trim() || (lang === 'ar' ? 'الفريق الثاني' : 'Team 2'),
+        ];
+        setJeopardyBoard(board);
+        setJeopardyActiveCol(null);
+        setJeopardyActiveCell(null);
+        setScores([0, 0]);
+        setTeamNames(names);
+        setActiveTeam(0);
+        setFirstTeam(0);
+        setAnswered(false);
+        setOptStates(['', '', '', '']);
+        setFeedback(null);
+        setGameDiff('jeopardy');
+        setConfettiActive(false);
+        setScreen('jeopardy');
+      })
+      .catch(() => setApiError('err_api'))
+      .finally(() => setIsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategories, availableCategories, otdbToken, lang]);
+
+  // ── Always-fresh refs ─────────────────────────────────────
+
   showResultsRef.current = () => {
     stopTimer();
     let color = '#e8b84b';
@@ -432,20 +568,29 @@ export function useGame(): GameAPI {
     else if (scores[1] > scores[0]) color = '#3aaa8a';
     setConfettiColor(color);
     setConfettiActive(true);
-
     if (user) {
       saveEntry({
-        id: `tq-${Date.now()}`,
-        mobile: user.mobile,
-        playerName: user.name,
-        teams: [
-          { name: teamNames[0], score: scores[0] },
-          { name: teamNames[1], score: scores[1] },
-        ],
-        diff: gameDiff,
-        mode: gameMode,
-        total: questions.length,
-        timestamp: Date.now(),
+        id: `tq-${Date.now()}`, mobile: user.mobile, playerName: user.name,
+        teams: [{ name: teamNames[0], score: scores[0] }, { name: teamNames[1], score: scores[1] }],
+        diff: gameDiff, mode: gameMode, total: questions.length, timestamp: Date.now(),
+      });
+    }
+    setScreen('results');
+  };
+
+  endJeopardyRef.current = () => {
+    stopTimer();
+    const total = jeopardyBoard.reduce((s, c) => s + c.cells.length, 0);
+    let color = '#e8b84b';
+    if (scores[0] > scores[1]) color = '#e05555';
+    else if (scores[1] > scores[0]) color = '#3aaa8a';
+    setConfettiColor(color);
+    setConfettiActive(true);
+    if (user) {
+      saveEntry({
+        id: `tq-${Date.now()}`, mobile: user.mobile, playerName: user.name,
+        teams: [{ name: teamNames[0], score: scores[0] }, { name: teamNames[1], score: scores[1] }],
+        diff: 'jeopardy', mode: 'jeopardy', total, timestamp: Date.now(),
       });
     }
     setScreen('results');
@@ -453,10 +598,7 @@ export function useGame(): GameAPI {
 
   advanceRoundRef.current = () => {
     const nextQ = currentQ + 1;
-    if (nextQ >= questions.length) {
-      showResultsRef.current();
-      return;
-    }
+    if (nextQ >= questions.length) { showResultsRef.current(); return; }
     const nextFirst: 0 | 1 = firstTeam === 0 ? 1 : 0;
     setCurrentQ(nextQ);
     setFirstTeam(nextFirst);
@@ -468,10 +610,71 @@ export function useGame(): GameAPI {
     startTimer(15);
   };
 
+  // Jeopardy: mark cell used, show feedback, then return to board
+  const resolveJeopardyCell = (colIdx: number, cellIdx: number) => {
+    setJeopardyBoard(prev => prev.map((c, ci) =>
+      ci === colIdx
+        ? { ...c, cells: c.cells.map((cl, li) => li === cellIdx ? { ...cl, used: true } : cl) }
+        : c
+    ));
+    window.setTimeout(() => {
+      setJeopardyActiveCol(null);
+      setJeopardyActiveCell(null);
+      setAnswered(false);
+      setOptStates(['', '', '', '']);
+      setFeedback(null);
+      setActiveTeam(prev => (prev === 0 ? 1 : 0));
+    }, 2000);
+  };
+
+  handleJeopardyAnswerRef.current = (chosen: number) => {
+    if (answered || jeopardyActiveCol === null || jeopardyActiveCell === null) return;
+    stopTimer();
+    const col  = jeopardyBoard[jeopardyActiveCol];
+    const cell = col?.cells[jeopardyActiveCell];
+    if (!col || !cell) return;
+
+    const q       = cell.question;
+    const correct = chosen === q.ans;
+
+    setOptStates(Array.from({ length: 4 }, (_, i) =>
+      i === q.ans ? 'correct' : i === chosen ? 'wrong' : ''
+    ) as OptionState[]);
+    setAnswered(true);
+
+    if (correct) {
+      setScores(prev => {
+        const next = [...prev] as [number, number];
+        next[activeTeam] += cell.points;
+        return next;
+      });
+      setFeedback({ type: 'correct', msg: `✔ +${cell.points} ${t('pts')} → ${teamNames[activeTeam]}` });
+    } else {
+      const optLabel = `${LABELS[q.ans]}: ${q.opts[lang][q.ans]}`;
+      setFeedback({ type: 'wrong', msg: `${t('fb_wrong')} ${optLabel}` });
+    }
+
+    resolveJeopardyCell(jeopardyActiveCol, jeopardyActiveCell);
+  };
+
   handleTimeoutRef.current = () => {
+    // ── Jeopardy timeout ──
+    if (screen === 'jeopardy' && jeopardyActiveCol !== null && jeopardyActiveCell !== null) {
+      if (answered) return;
+      const col  = jeopardyBoard[jeopardyActiveCol];
+      const cell = col?.cells[jeopardyActiveCell];
+      if (!col || !cell) return;
+      const q = cell.question;
+      setAnswered(true);
+      setOptStates(Array.from({ length: 4 }, (_, i) => (i === q.ans ? 'reveal' : '')) as OptionState[]);
+      setFeedback({ type: 'timeout', msg: `⏱ ${t('fb_wrong')} ${LABELS[q.ans]}: ${q.opts[lang][q.ans]}` });
+      resolveJeopardyCell(jeopardyActiveCol, jeopardyActiveCell);
+      return;
+    }
+
+    // ── Trivia timeout ──
     if (answered) return;
     const otherTeam: 0 | 1 = activeTeam === 0 ? 1 : 0;
-
     if (!isTransfer) {
       setAnswered(true);
       setFeedback({ type: 'timeout', msg: `${teamNames[otherTeam]} ${t('fb_timeout_steal')}` });
@@ -494,13 +697,13 @@ export function useGame(): GameAPI {
     }
   };
 
+  // ── Answer handlers ───────────────────────────────────────
+
   const handleAnswer = useCallback((chosen: number) => {
     if (answered) return;
     stopTimer();
-
     const q = questions[currentQ];
     const correct = chosen === q.ans;
-
     setOptStates(
       Array.from({ length: 4 }, (_, i) => {
         if (i === q.ans) return 'correct';
@@ -509,22 +712,32 @@ export function useGame(): GameAPI {
       }) as OptionState[]
     );
     setAnswered(true);
-
     if (correct) {
-      setScores(prev => {
-        const next: [number, number] = [...prev] as [number, number];
-        next[activeTeam]++;
-        return next;
-      });
+      setScores(prev => { const next = [...prev] as [number, number]; next[activeTeam]++; return next; });
       setFeedback({ type: 'correct', msg: `${t('fb_correct')} ${teamNames[activeTeam]}` });
     } else {
       const optLabel = `${LABELS[q.ans]}: ${q.opts[lang][q.ans]}`;
       setFeedback({ type: 'wrong', msg: `${t('fb_wrong')} ${optLabel}` });
     }
-
     window.setTimeout(() => advanceRoundRef.current(), 2000);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answered, questions, currentQ, activeTeam, teamNames, lang, t, stopTimer]);
+
+  const handleJeopardyAnswer = useCallback((chosen: number) => {
+    handleJeopardyAnswerRef.current(chosen);
+  }, []);
+
+  const pickJeopardyCell = useCallback((col: number, cell: number) => {
+    setJeopardyActiveCol(col);
+    setJeopardyActiveCell(cell);
+    setAnswered(false);
+    setOptStates(['', '', '', '']);
+    setFeedback(null);
+    startTimer(15);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Post-game ─────────────────────────────────────────────
 
   const playAgain = useCallback(() => {
     setConfettiActive(false);
@@ -559,16 +772,19 @@ export function useGame(): GameAPI {
     screen, lang, t, toggleLang,
     user, goWelcome, goLogin, goGuest, doLogin, doLogout,
     difficulty, setDifficulty, gameMode, setGameMode,
+    gameStyle, setGameStyle, numQuestions, setNumQuestions,
     availableCategories, selectedCategories, categoriesLoading,
     toggleCategory, selectAllCategories, clearCategories,
     builderCategories, goBuilder, addBuilderCategory, deleteBuilderCategory,
-    addQuestionToCategory, deleteQuestionFromCategory,
+    addQuestionToCategory, deleteQuestionFromCategory, importFromExcel,
     leaderboard, goLeaderboard, clearLeaderboard,
     isLoading, apiError, clearApiError: () => setApiError(null),
-    startGame, startCustomGame,
+    startGame, startCustomGame, startJeopardyGame,
     questions, currentQ, scores, teamNames, activeTeam, isTransfer,
     timeLeft, timerDuration, optStates, feedback,
     handleAnswer,
+    jeopardyBoard, jeopardyActiveCol, jeopardyActiveCell,
+    pickJeopardyCell, handleJeopardyAnswer,
     gameDiff, playAgain, goHome,
     confettiActive, confettiColor,
     quitModal, clearModal, addQModal, addQCategoryId, addCategoryModal,

@@ -1,7 +1,8 @@
 export type Lang = 'en' | 'ar';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type GameMode = 'ready' | 'custom';
-export type Screen = 'welcome' | 'login' | 'home' | 'leaderboard' | 'builder' | 'game' | 'results';
+export type GameStyle = 'trivia' | 'jeopardy';
+export type Screen = 'welcome' | 'login' | 'home' | 'leaderboard' | 'builder' | 'game' | 'results' | 'jeopardy';
 export type OptionState = '' | 'correct' | 'wrong' | 'reveal';
 
 export interface User { mobile: string; name: string; }
@@ -36,4 +37,17 @@ export interface LeaderboardEntry {
   mode: string;
   total: number;
   timestamp: number;
+}
+
+export interface JeopardyCell {
+  question: Question;
+  points: number;       // 100 | 200 | 300
+  difficulty: Difficulty;
+  used: boolean;
+}
+
+export interface JeopardyColumn {
+  categoryId: number;
+  categoryName: string;
+  cells: JeopardyCell[]; // always 6: [easy, easy, medium, medium, hard, hard]
 }
